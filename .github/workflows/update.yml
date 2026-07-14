@@ -1,8 +1,8 @@
-name: Converted SMAdHosts to AdGuard Home
+name: Converted SMAdHosts to Pure Domains
 
 on:
   schedule:
-    - cron: '0 23 * * *' # 每天北京时间早上 7 点自动运行
+    - cron: '0 23 * * *' # 每天北京时间早上 7 点自动运行一次
   workflow_dispatch: # 允许手动点击按钮触发更新
 
 permissions:
@@ -13,34 +13,39 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v5 # 升级到 v5 版本，彻底解决 Node.js 20 弃用警告
+        uses: actions/checkout@v5
 
-      - name: Fetch and Convert Hosts
+      - name: Fetch and Clean Domains
         run: |
           echo "正在下载原始文件..."
           curl -sSL "https://raw.githubusercontent.com/2Gardon/SM-Ad-FuckU-hosts/refs/heads/master/SMAdHosts" -o raw_hosts.txt
           
-          echo "正在转换格式并过滤白名单..."
-          echo "! Title: SMAdHosts-ADG (Safe Filtered)" > adg_rules.txt
+          echo "正在提取纯域名并过滤白名单..."
+          echo "! Title: SMAdHosts - Pure Domains" > adg_rules.txt
           echo "! Homepage: https://github.com/${{ github.repository }}" >> adg_rules.txt
           echo "! Source: https://raw.githubusercontent.com/2Gardon/SM-Ad-FuckU-hosts/refs/heads/master/SMAdHosts" >> adg_rules.txt
           echo "! Expires: 24 Hours" >> adg_rules.txt
           echo "!" >> adg_rules.txt
           
+          # 核心提取逻辑：只保留域名本身，不加 || 和 ^
           awk '
+          # 1. 转换注释
           /^[[:space:]]*#/ { print "!" substr($0, index($0, "#")+1); next }
           /^[[:space:]]*$/ { print ""; next }
           
           {
+            # 2. 只处理 127.0.0.1 或 0.0.0.0 开头的行
             if ($1 == "127.0.0.1" || $1 == "0.0.0.0") {
               for (i=2; i<=NF; i++) {
                 domain = $i
                 
+                # 移除行尾可能存在的带 # 号的注释
                 sub(/#.*/, "", domain)
                 
                 if (domain != "") {
                   lower_domain = tolower(domain)
                   
+                  # 3. 排除白名单
                   if (lower_domain ~ /localhost/ || 
                       lower_domain ~ /github/ || 
                       lower_domain ~ /google/ || 
@@ -50,7 +55,8 @@ jobs:
                     continue
                   }
                   
-                  print "||" domain "^"
+                  # 4. 只输出纯域名
+                  print domain
                 }
                 if (index($i, "#") == 1) break
               }
@@ -58,7 +64,7 @@ jobs:
           }' raw_hosts.txt >> adg_rules.txt
           
           rm raw_hosts.txt
-          echo "转换与净化完成！"
+          echo "纯域名清洗完成！"
 
       - name: Commit and Push Changes
         run: |
@@ -66,8 +72,8 @@ jobs:
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add adg_rules.txt
           if git diff --staged --quiet; then
-            echo "规则没有变化，跳过提交。"
+            echo "没有变化，跳过提交。"
           else
-            git commit -m "自动更新并过滤规则 ($(date +'%Y-%m-%d %H:%M:%S'))"
+            git commit -m "自动更新纯域名规则 ($(date +'%Y-%m-%d %H:%M:%S'))"
             git push
           fi

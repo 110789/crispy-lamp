@@ -27,27 +27,21 @@ jobs:
           echo "! Expires: 24 Hours" >> adg_rules.txt
           echo "!" >> adg_rules.txt
           
-          # 核心过滤与转换逻辑
+          # 核心过滤与转换逻辑（已进行Shell与Actions转义）
           awk '
-          # 1. 转换注释
           /^[[:space:]]*#/ { print "!" substr($0, index($0, "#")+1); next }
           /^[[:space:]]*$/ { print ""; next }
           
           {
-            # 2. 严格限制：只处理以本地回环 IP (127.0.0.1 或 0.0.0.0) 开头的行
-            # 从而完美跳过类似 108.177.125.188 mtalk.google.com 等所有公网 IP 加速行
             if ($1 == "127.0.0.1" || $1 == "0.0.0.0") {
               for (i=2; i<=NF; i++) {
                 domain = $i
                 
-                # 移除行尾可能存在的带 # 号的注释
                 sub(/#.*/, "", domain)
                 
                 if (domain != "") {
-                  # 将域名转为小写以便匹配
                   lower_domain = tolower(domain)
                   
-                  # 3. 显式白名单过滤：含有以下关键字的域名，一律不转为拦截规则
                   if (lower_domain ~ /localhost/ || 
                       lower_domain ~ /github/ || 
                       lower_domain ~ /google/ || 
@@ -64,7 +58,6 @@ jobs:
             }
           }' raw_hosts.txt >> adg_rules.txt
           
-          # 清理临时文件
           rm raw_hosts.txt
           echo "转换与净化完成！"
 
@@ -79,4 +72,3 @@ jobs:
             git commit -m "自动更新并过滤规则 ($(date +'%Y-%m-%d %H:%M:%S'))"
             git push
           fi
-          
